@@ -1,0 +1,4 @@
+interface:
+  display_name: "WebRTC IP Leak Guard"
+  short_description: "Find and reduce Windows IP leak risks."
+  default_prompt: "Use $webrtc-ip-leak-guard to check this Windows system for IP, DNS, IPv6, proxy, and WebRTC leak risks, then apply safe fixes."
