@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布博客文章"
+  short_description: "发布 Hugo/GitHub Pages 博客文章"
+  default_prompt: "Use $publish-blog-post to add and publish a new article to the Hugo GitHub Pages blog."
