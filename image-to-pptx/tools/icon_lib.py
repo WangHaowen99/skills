@@ -337,3 +337,234 @@ def ic_globe(sh, cx, cy, s, c, lw=1.3):
     _l(sh, cx-s*.44, cy, cx+s*.44, cy, c, lw)
     _l(sh, cx-s*.38, cy-s*.22, cx+s*.38, cy-s*.22, c, lw*.85)
     _l(sh, cx-s*.38, cy+s*.22, cx+s*.38, cy+s*.22, c, lw*.85)
+
+
+# ======================================================================
+# 构建子系统 deck 沉淀（2026-10）：线性图标 + 一处红色点缀
+#
+# 签名同上：ic_xxx(sh, cx, cy, s, c, ...)；c 是主体色，accent 是点缀色（默认 ACCENT 红）。
+# 后 11 个由源图逐个描出：函数里保留设计稿坐标，按 (设计中心, 设计尺寸) 等比换算，
+# 所以 s 取设计尺寸、cx/cy 取设计中心时，输出和源图描摹完全一致。
+# ======================================================================
+from draw_kit import pl, seg, arc_pts, cubic, shield_pts, ACCENT, PANEL
+
+def _xf(cx, cy, s, CX, CY, S):
+    """设计稿坐标 → 实际坐标。返回 (点换算, 长度换算)。"""
+    k = s / float(S)
+    return (lambda x, y: (cx + (x - CX) * k, cy + (y - CY) * k)), (lambda l: l * k)
+
+def ic_chat_solid(sh, cx, cy, s, c, dot=WHITE):
+    """实心对话气泡 + 三个白点。"""
+    rrect(sh, cx - s*.48, cy - s*.40, s*.96, s*.66, c, None, radius=s*.30)
+    pl(sh, [(cx - s*.22, cy + s*.20), (cx - s*.30, cy + s*.44), (cx - s*.02, cy + s*.22)], None, 0, True, c)
+    for dx in (-.22, 0, .22):
+        oval(sh, cx + s*dx - s*.07, cy - s*.14, s*.14, s*.14, dot, None)
+
+def ic_chat(sh, cx, cy, s, c, lw=1.6):
+    """描边方形对话气泡（尾巴在左下）。"""
+    x0, x1, y0, y1 = cx - s*.46, cx + s*.46, cy - s*.40, cy + s*.22
+    pl(sh, [(x0 + s*.20, y1), (x0 + s*.12, cy + s*.44), (x0 + s*.38, y1),
+            (x1, y1), (x1, y0), (x0, y0), (x0, y1), (x0 + s*.20, y1)], c, lw)
+
+def ic_screen(sh, cx, cy, s, c, lw=1.6):
+    rrect(sh, cx - s*.48, cy - s*.40, s*.96, s*.62, None, c, lw, radius=s*.06)
+    seg(sh, cx, cy + s*.22, cx, cy + s*.40, c, lw)
+    seg(sh, cx - s*.24, cy + s*.42, cx + s*.24, cy + s*.42, c, lw)
+
+def ic_bullets(sh, cx, cy, s, c, lw=1.6):
+    for dy in (-.30, 0, .30):
+        seg(sh, cx - s*.46, cy + s*dy, cx - s*.34, cy + s*dy, c, lw)
+        seg(sh, cx - s*.16, cy + s*dy, cx + s*.46, cy + s*dy, c, lw)
+
+def ic_shield_ck(sh, cx, cy, s, c, lw=1.6, ck=None):
+    ic_shield2(sh, cx, cy, s, c, lw)
+    pl(sh, [(cx - s*.17, cy + s*.01), (cx - s*.03, cy + s*.15), (cx + s*.20, cy - s*.12)], ck or c, lw)
+
+def ic_shield2(sh, cx, cy, s, c, lw=1.6, fill=None):
+    return pl(sh, shield_pts(cx - s*.38, cy - s*.46, s*.76, s*.92), c, lw, close=True, fill=fill)
+
+def ic_swap(sh, cx, cy, s, c, lw=1.8):
+    seg(sh, cx - s*.42, cy - s*.16, cx + s*.40, cy - s*.16, c, lw)
+    pl(sh, [(cx + s*.22, cy - s*.36), (cx + s*.44, cy - s*.16), (cx + s*.22, cy + s*.04)], c, lw)
+    seg(sh, cx + s*.42, cy + s*.20, cx - s*.40, cy + s*.20, c, lw)
+    pl(sh, [(cx - s*.22, cy + s*.00), (cx - s*.44, cy + s*.20), (cx - s*.22, cy + s*.40)], c, lw)
+
+def ic_term(sh, cx, cy, s, c, lw=1.5):
+    rrect(sh, cx - s*.48, cy - s*.38, s*.96, s*.76, None, c, lw, radius=s*.06)
+    pl(sh, [(cx - s*.26, cy - s*.14), (cx - s*.08, cy + s*.02), (cx - s*.26, cy + s*.18)], c, lw)
+    seg(sh, cx + s*.02, cy + s*.18, cx + s*.24, cy + s*.18, c, lw)
+
+def ic_group3(sh, cx, cy, s, c, lw=1.5):
+    for dx in (-.30, .30):
+        oval(sh, cx + s*dx - s*.11, cy - s*.36, s*.22, s*.22, None, c, lw)
+        pl(sh, arc_pts(cx + s*dx, cy + s*.30, s*.19, 180, 360, 14, ry=s*.32), c, lw)
+    oval(sh, cx - s*.14, cy - s*.42, s*.28, s*.28, WHITE, c, lw)
+    pts = arc_pts(cx, cy + s*.40, s*.26, 180, 360, 18, ry=s*.40)
+    pl(sh, pts + [pts[0]], c, lw, fill=WHITE)
+
+def ic_dbase(sh, cx, cy, s, c, lw=1.5):
+    w, eh = s*.76, s*.24
+    x0 = cx - w/2
+    oval(sh, x0, cy - s*.46, w, eh, None, c, lw)
+    for dy in (-.11, .12, .34):
+        pl(sh, arc_pts(cx, cy + s*dy, w/2, 0, 180, 16, ry=eh/2), c, lw)
+    seg(sh, x0, cy - s*.34, x0, cy + s*.34, c, lw)
+    seg(sh, x0 + w, cy - s*.34, x0 + w, cy + s*.34, c, lw)
+
+def ic_docf(sh, cx, cy, s, c, lw=1.5, n=3):
+    """折角文档 + n 条横线。"""
+    x0, y0, w, h = cx - s*.34, cy - s*.46, s*.68, s*.92
+    pl(sh, [(x0 + w*.62, y0), (x0, y0), (x0, y0 + h), (x0 + w, y0 + h), (x0 + w, y0 + h*.28),
+            (x0 + w*.62, y0), (x0 + w*.62, y0 + h*.28), (x0 + w, y0 + h*.28)], c, lw)
+    for i in range(n):
+        yy = y0 + h*(.48 + i*.16)
+        seg(sh, x0 + w*.24, yy, x0 + w*(.76 if i < n - 1 else .60), yy, c, lw*.9)
+
+def ic_box3d(sh, cx, cy, s, c, lw=1.6):
+    pl(sh, [(cx, cy - s*.46), (cx + s*.42, cy - s*.24), (cx + s*.42, cy + s*.24), (cx, cy + s*.46),
+            (cx - s*.42, cy + s*.24), (cx - s*.42, cy - s*.24), (cx, cy - s*.46)], c, lw)
+    pl(sh, [(cx - s*.42, cy - s*.24), (cx, cy - s*.02), (cx + s*.42, cy - s*.24)], c, lw)
+    seg(sh, cx, cy - s*.02, cx, cy + s*.46, c, lw)
+
+def ic_gear2(sh, cx, cy, s, c, lw=1.6):
+    pts = []
+    for i in range(8):
+        for a, r in ((45.*i - 12, .48), (45.*i + 12, .48), (45.*i + 20, .35), (45.*i + 25, .35)):
+            pts.append((cx + s*r*math.cos(math.radians(a)), cy + s*r*math.sin(math.radians(a))))
+    pl(sh, pts + [pts[0]], c, lw)
+    oval(sh, cx - s*.15, cy - s*.15, s*.30, s*.30, None, c, lw)
+
+def ic_bulbq(sh, cx, cy, s, c, q=None, lw=1.6):
+    """灯泡 + 红色问号。"""
+    pts = arc_pts(cx, cy - s*.12, s*.30, 140, 400, 28)
+    pl(sh, [(cx - s*.14, cy + s*.22)] + pts + [(cx + s*.14, cy + s*.22), (cx - s*.14, cy + s*.22)], c, lw)
+    seg(sh, cx - s*.14, cy + s*.32, cx + s*.14, cy + s*.32, c, lw)
+    seg(sh, cx - s*.09, cy + s*.42, cx + s*.09, cy + s*.42, c, lw)
+    q = q or ACCENT
+    pl(sh, arc_pts(cx, cy - s*.18, s*.09, 190, 400, 12) + [(cx, cy - s*.02)], q, lw*1.1)
+    oval(sh, cx - s*.035, cy + s*.06, s*.07, s*.07, q, None)
+
+
+def ic_bars_solid(sh, cx, cy, s, c):
+    """三根实心递增柱（业务验证）。设计尺寸 32.5。"""
+    P, L = _xf(cx, cy, s, 1319.75, 148.75, 32.5)
+    for x, top in ((1303.5, 153), (1315, 143), (1326.5, 132.5)):
+        rect(sh, *P(x, top), L(9.5), L(165 - top), c, None)
+
+def ic_org_tree(sh, cx, cy, s, c, accent=None, lw=2.25):
+    """分工树：红色主节点 + 三个子节点。设计尺寸 88（高）。"""
+    P, L = _xf(cx, cy, s, 175, 626, 88)
+    seg(sh, *P(175, 612), *P(175, 645), c, lw)
+    pl(sh, [P(132, 645), P(132, 636), P(175, 620), P(218, 636), P(218, 645)], c, lw)
+    for dx in (-43.5, 0, 43.5):
+        oval(sh, *P(175 + dx - 12.5, 645), L(25), L(25), None, c, lw)
+    oval(sh, *P(160, 582.5), L(30), L(30), accent or ACCENT, None)
+
+def ic_doc_shield(sh, cx, cy, s, c, accent=None, bg=PANEL, lw=2.4):
+    """文档 + 盾牌对勾 + 回退箭头（改动先校验再生效）。bg 填卡片底色，用来挖出盾牌外的留白。设计尺寸 90。"""
+    P, L = _xf(cx, cy, s, 527.5, 625, 90)
+    a = accent or ACCENT
+    rrect(sh, *P(460, 580), L(77), L(90), None, c, lw, radius=L(7))
+    for y, x2 in ((602, 505), (620, 499), (638, 499)):
+        seg(sh, *P(474, y), *P(x2, y), c, lw)
+    pl(sh, shield_pts(*P(501, 596), L(66), L(74)), None, 0, close=True, fill=bg)
+    pl(sh, shield_pts(*P(507, 602), L(54), L(61)), c, lw, close=True, fill=bg)
+    pl(sh, [P(522, 630), P(531, 639), P(546, 621)], a, 2.6)
+    pl(sh, [P(573, 668)] + [P(x, y) for x, y in arc_pts(583, 657, 11, 90, -90, 16)] + [P(571, 646)], c, lw)
+    pl(sh, [P(577, 640), P(571, 646), P(577, 652)], c, lw)
+
+def ic_expert_chat(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """人像 + 红色对话气泡（专家把关）。设计尺寸 89。"""
+    P, L = _xf(cx, cy, s, 845, 624.5, 89)
+    a = accent or ACCENT
+    oval(sh, *P(798, 596), L(38), L(38), None, c, lw)
+    pts = [P(x, y) for x, y in arc_pts(817, 669, 33, 180, 360, 20, ry=28)]
+    pl(sh, pts + [pts[0]], c, lw)
+    rrect(sh, *P(849, 580), L(57), L(40), WHITE, a, 2.4, radius=L(8))
+    pl(sh, [P(858, 619), P(859, 632), P(871, 619)], a, 2.4, fill=WHITE)
+    seg(sh, *P(856, 618.5), *P(874, 618.5), WHITE, 2.6)
+    for x in (865, 877.5, 890):
+        oval(sh, *P(x - 3.5, 596.5), L(7), L(7), a, None)
+
+def ic_cycle_search(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """四段循环箭头 + 红色放大镜（测试—诊断—改进闭环）。设计尺寸 104（环直径）。"""
+    P, L = _xf(cx, cy, s, 1165, 626, 104)
+    a = accent or ACCENT
+    R0 = 52
+    for head in (-75, 15, 105, 195):
+        pl(sh, [P(x, y) for x, y in arc_pts(1165, 626, R0, head - 68, head, 16)], c, lw)
+        r = math.radians(head)
+        tx, ty = 1165 + R0 * math.cos(r), 626 + R0 * math.sin(r)
+        ux, uy = -math.sin(r), math.cos(r)          # 顺时针切向
+        nx, ny = math.cos(r), math.sin(r)
+        k = 9
+        pl(sh, [P(tx - ux * k + nx * k, ty - uy * k + ny * k), P(tx, ty),
+                P(tx - ux * k - nx * k, ty - uy * k - ny * k)], c, lw)
+    oval(sh, *P(1143, 603), L(39), L(39), None, a, 2.8)
+    seg(sh, *P(1177, 637), *P(1188, 649), a, 3.2)
+
+def ic_toggle_docs(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """两份文档中间一个红色开关（双引擎切换）。设计尺寸 70（高）。"""
+    P, L = _xf(cx, cy, s, 1498.5, 622, 70)
+    for x0, xl in ((1407, 1422), (1532, 1546)):
+        rrect(sh, *P(x0, 587), L(58), L(70), None, c, 2.6, radius=L(4))
+        for y, ln in ((605, 30), (622, 30), (638, 22)):
+            seg(sh, *P(xl, y), *P(xl + ln, y), c, lw)
+    rrect(sh, *P(1471, 607), L(54), L(30), accent or ACCENT, None, radius=L(15))
+    oval(sh, *P(1500, 612), L(20), L(20), WHITE, None)
+
+def ic_signpost(sh, cx, cy, s, c, accent=None, lw=2.2):
+    """路标：红色指向牌 + 描边反向牌（AI 带路）。设计尺寸 66（高）。"""
+    P, L = _xf(cx, cy, s, 185, 627, 66)
+    pl(sh, [P(191, 600), P(219, 600), P(228.5, 609), P(219, 618), P(191, 618)], None, 0, True, accent or ACCENT)
+    pl(sh, [P(181, 626), P(150, 626), P(142, 635), P(150, 644), P(181, 644)], c, lw, True, WHITE)
+    rect(sh, *P(181, 594.5), L(10), L(65.5), WHITE, c, lw)
+
+def ic_eye(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """眼睛，红色瞳孔（看得清）。设计尺寸 86（宽）。"""
+    P, L = _xf(cx, cy, s, 510, 627.5, 86)
+    top = cubic(P(467, 627.5), P(486, 597), P(534, 597), P(553, 627.5), 20)
+    bot = cubic(P(553, 627.5), P(534, 658), P(486, 658), P(467, 627.5), 20)
+    pl(sh, top + bot[1:], c, lw, True, WHITE)
+    oval(sh, *P(499.5, 617.5), L(20), L(20), accent or ACCENT, None)
+    oval(sh, *P(506, 624), L(7), L(7), WHITE, None)
+
+def ic_puzzle(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """拼图：描边主块 + 红色补块（增量建模）。设计尺寸 82（宽）。"""
+    P, L = _xf(cx, cy, s, 839.5, 627, 82)
+    a = accent or ACCENT
+    pts = [(812.5, 609), (832.9, 609)]
+    pts += arc_pts(838.3, 603, 8, 131.5, 408.5, 20)
+    pts += [(865, 609), (865, 659), (843.6, 659)]
+    pts += arc_pts(838.3, 653, 8, 48.5, -228.5, 20)
+    pts += [(812.5, 659), (812.5, 639.3)]
+    pts += arc_pts(806.5, 634, 8, 41.5, 318.5, 20)
+    pl(sh, [P(x, y) for x, y in pts], c, lw, True, WHITE)
+    oval(sh, *P(847.5, 627), L(13.5), L(13.5), a, None)
+    rrect(sh, *P(859.5, 618), L(21), L(35.5), a, None, radius=L(2))
+
+def ic_replay(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """顺时针重播环 + 红色播放三角（断点续跑）。设计尺寸 64（环直径）。"""
+    P, L = _xf(cx, cy, s, 1165.5, 627, 64)
+    R0 = 32
+    pl(sh, [P(x, y) for x, y in arc_pts(1165.5, 627, R0, 5, 338, 40)], c, lw)
+    r = math.radians(338)
+    tx, ty = 1165.5 + R0 * math.cos(r), 627 + R0 * math.sin(r)
+    ux, uy = -math.sin(r), math.cos(r)
+    nx, ny = math.cos(r), math.sin(r)
+    k = 9
+    pl(sh, [P(tx - ux * k + nx * k, ty - uy * k + ny * k), P(tx, ty),
+            P(tx - ux * k - nx * k, ty - uy * k - ny * k)], c, lw)
+    pl(sh, [P(1157.5, 615.5), P(1179, 628), P(1157.5, 640.5)], None, 0, True, accent or ACCENT)
+
+def ic_chat_dots(sh, cx, cy, s, c, accent=None, lw=2.4):
+    """方角对话气泡 + 三个红点（说人话）。设计尺寸 74（宽）。"""
+    P, L = _xf(cx, cy, s, 1493.75, 627.5, 74)
+    x0, x1, y0, y1, rr = 1456.7, 1530.8, 596, 643.5, 7
+    pts = arc_pts(x0 + rr, y0 + rr, rr, 180, 270, 6) + arc_pts(x1 - rr, y0 + rr, rr, 270, 360, 6)
+    pts += arc_pts(x1 - rr, y1 - rr, rr, 0, 90, 6)
+    pts += [(1493.7, y1), (1474, 659), (1474, y1)]
+    pts += arc_pts(x0 + rr, y1 - rr, rr, 90, 180, 6)
+    pl(sh, [P(x, y) for x, y in pts], c, lw, True, WHITE)
+    for x in (1475.4, 1493, 1510.5):
+        oval(sh, *P(x - 4.7, 615.3), L(9.4), L(9.4), accent or ACCENT, None)

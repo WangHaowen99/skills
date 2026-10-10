@@ -48,10 +48,13 @@ def render(modname, crop=None, outdir="_preview"):
     return final
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
     crop = None
-    if "--crop" in sys.argv:
-        crop = tuple(float(v) for v in sys.argv[sys.argv.index("--crop") + 1].split(","))
+    if "--crop" in argv:
+        i = argv.index("--crop")
+        crop = tuple(float(v) for v in argv[i + 1].split(","))
+        del argv[i:i + 2]          # 坐标值不是页模块名，不能留在 args 里
+    args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__); sys.exit(1)
     for m in args:
