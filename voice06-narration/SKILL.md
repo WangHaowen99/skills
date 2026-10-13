@@ -1,0 +1,76 @@
+---
+name: voice06-narration
+description: 用本机 IndexTTS-2.5 + 示例音色 voice_06（偏男声、口语感强）把一段中文文案做成带情绪的朗读音频：写分段文案→每段配情绪向量→合成→whisper 转写核对→拼接响度统一→归档。用户要求"用 voice06/voice_06 读一段""用 IndexTTS 做配音/朗读/旁白""把文案生成带情绪的语音"时使用；换其他参考音色也适用（改 speaker）。
+---
+
+# voice06 情绪朗读制作
+
+## 环境
+- IndexTTS 根目录：环境变量 `INDEX_TTS_ROOT`（默认 `~/index-tts`），venv 在 `.venv`，权重在 `checkpoints/`。
+  `synth.py` 依赖其中的 `indextts.infer_v2_5.IndexTTS2`（IndexTTS-2.5）。
+- 音色参考：`$INDEX_TTS_ROOT/examples/voice_06.wav`；spec 顶层写 `speaker` 可换成别的参考音频。
+- 国内网络拉模型走 `HF_ENDPOINT=https://hf-mirror.com`，`synth.py` 已默认设置。
+- 本 skill 目录记为 `$S`。下文的 `<任务名>` 目录都建在 `$INDEX_TTS_ROOT` 下。
+
+## 流程
+
+### 1. 先讲方案，等用户确认
+动手前用几句话说明：文案草稿（分段并标注每段情绪）、预计时长（中文约 4.5 字/秒）、输出位置。
+文案风格按用户要求来（科普/口播/相声腔等）；用户中途改风格就重写文案再继续。
+
+### 2. 写 spec.json
+以 `$S/examples/harness-spec.json` 为模板，存到 `$INDEX_TTS_ROOT/<任务名>/spec.json`。
+- 每段 1~3 句、≤80 字。分段是为了每段单独控制情绪、单独返工。
+- `emo_vector` 顺序：`[喜, 怒, 哀, 惧, 厌恶, 低落, 惊讶, 平静]`，各维 0~1，和不超过 1。
+- 常用配方：
+  - 平静讲解 `[0,0,0,0,0,0,0,0.8]`
+  - 友好引入 `[0.2,0,0,0,0,0,0,0.6]`
+  - 强调/略兴奋 `[0.4,0,0,0,0,0,0.1,0.3]`
+  - 自信收尾 `[0.3,0,0,0,0,0,0,0.5]`
+  - 悲伤 `[0,0,0.7,0,0,0.2,0,0]`
+  - 惊讶 `[0.2,0,0,0,0,0,0.6,0]`
+- `emo_alpha` 默认 0.6；>0.8 容易丢音色。正经内容的情绪宜轻。
+- 可选字段：
+  - 每段的 `duration_factor`：0.8 偏快，1.2 偏慢。
+  - 顶层的 `speaker`：换其他参考音频。
+- 英文术语（如 Harness）在情绪强的段落容易读歪，所以尽量放在平静段，或者准备好返工。
+  讲解类内容里，OCR、Neo4j、JSON、token 这类词可以直接在朗读文本里换成中文说法（文字识别、图数据库、结构化结果、词元）。
+- 给 3b1b-explainer 视频配音时，用它的 `narration_to_spec.py` 从 `narration.py` 生成 spec，不用手写。
+
+### 3. 合成
+```bash
+cd $INDEX_TTS_ROOT && .venv/bin/python $S/scripts/synth.py <任务名>/spec.json <任务名>/out
+```
+- 用后台运行；模型加载约 1 分钟，RTF≈1.1~1.3（70 段约 15 分钟）。
+- 日志里出现 `Ninja is required` 和 campplus 的 ModelScope 404 都属正常，程序会自动回退。
+
+### 4. 转写核对（不能跳过，模型听不到音频）
+```bash
+cd /tmp && uv run --quiet --python 3.11 --with faster-whisper --with soundfile --with scipy \
+  python $S/scripts/verify.py $INDEX_TTS_ROOT/<任务名>/spec.json $INDEX_TTS_ROOT/<任务名>/out
+```
+逐段对照原文：
+- 同音字差异（只会/指挥、测试/测时）属于识别误差，可以忽略；转写偶尔输出繁体，也不算读错。
+- 漏字、多字、英文词被听成别的词，说明读坏了。调整该段的 `emo_vector`（降低兴奋、加一点平静）或改写措辞，然后只重做该段：
+  `synth.py spec.json out 3`。旧文件会自动保留为 `seg3_v1.wav`。
+- 重做后再跑一次核对。`use_random=False`，同样参数输出不变，所以必须改参数才会有不同结果。
+- 段数多时 CPU 核对很慢；有 GPU 的话改用 CUDA 版 faster-whisper（`device="cuda"`），几十段一两分钟。
+
+### 5. 拼接
+```bash
+bash $S/scripts/concat.sh $INDEX_TTS_ROOT/<任务名>/out <成品名> [停顿秒数=0.45]
+```
+输出 `<成品名>.wav`（44.1k，-16 LUFS）和 `.mp3`（192k）。
+
+### 6. 归档
+没有对应项目时，放用户的收件箱目录，建一个 `<标题>-voice06-<日期>/` 文件夹：
+- 成品 wav/mp3 和 `params.json`、`spec.json`
+- `分段/`：seg*.wav，含被替换的旧版本
+
+### 7. 汇报
+包括：成品路径、时长、各段情绪设置、核对结果（哪段返工过、原因）、如何微调。
+
+## 注意
+- voice_06 来源不明，官方配的文本是"我叫郭德纲"。如果听起来像某位真人，提醒用户：只适合个人试听，不要公开发布。
+- 克隆用户自己提供的人声时，需要确认用户已获得本人授权。
+- IndexTTS 许可证允许商用（超大规模除外），但禁止用它的输出改进其他模型。
