@@ -13,7 +13,9 @@ description: 把截图或设计稿复刻成可编辑的 pptx（原生矢量形�
 |---|---|
 | `deck_kit.py` | 底层：坐标换算、基本形状、文本框、字体槽位、存盘 |
 | `draw_kit.py` | 扩展图元：折线 / 弯箭头、独立圆角、混排多行文本、编号圆、胶囊标签、原生表格 |
-| `components.py` | 版面组件（C1–C11）与页型模板，编号和 ppt-deck 的 `STYLE.md` 一致 |
+| `components.py` | 版面组件（C1–C28）、控件与页型模板，编号和 ppt-deck 的 `STYLE.md` 一致 |
+| `arch_diagram.py` | C1 分层架构图排版引擎：写规格 → 自动排版 → 自动体检 |
+| `process_flow.py` | C29 工序流程图（人机分工）排版引擎：写规格 → 自动排版 → 自动体检 |
 | `icon_lib.py` | 77 个线性图标，签名统一 `ic_xxx(sh, cx, cy, s, c)` |
 | `preview.py` / `verify.py` | 单页渲染 / 交付体检 |
 
@@ -36,7 +38,7 @@ description: 把截图或设计稿复刻成可编辑的 pptx（原生矢量形�
 
 | 编号 | 组件 | 用途 |
 |---|---|---|
-| C1 | `arch_layer` `module_cell` `fanout` `bi_arrow` | 分层架构图：层名侧栏、模块格、分发连线、层间双向箭头 |
+| C1 | `arch_layer` `module_cell` `fanout` `bi_arrow` | 分层架构图底层件（整张图用下面的 `arch_diagram` 引擎） |
 | C2 | `grouped_table` | 原生表格，首列分组合并、重点行底色、逐格框线 |
 | C5 | `line_chart_card` `metric_card` `ba_parts` `stat_line` | 折线图卡（平滑 / 直线、网格、编号标注）；前后对比指标卡；数字标红的统计条 |
 | C6 | `step_chain` `flow_band` | 推导条（①→②→③）、闭环条 |
@@ -47,9 +49,32 @@ description: 把截图或设计稿复刻成可编辑的 pptx（原生矢量形�
 | C11 | `tag_title` `icon_disc` | 胶囊标签标题、图标圆底 |
 | 框架 | `page_title` `panel` `section_title` `footer` | 标题、面板、区块标题、页脚 |
 | 页型 A | `overview_page` | 左上图表 + 指标卡，右上时间轴 + 统计条，下方特性卡 |
+| C12–C16 | `hero_card` `dumbbell` `waterfall` `harvey_matrix` `quadrant` | 英雄数字卡、哑铃图、瀑布图、哈维球矩阵、四象限 |
+| C17、C22–C28 | `driver_tree` `fishbone` `funnel` `bullet_list` `risk_matrix` `strategy_house` `maturity_steps` `hub_spoke` | 指标拆解树、鱼骨图、漏斗图、子弹图、风险矩阵、战略屋、成熟度阶梯、中心辐射图（对应范式八–十三） |
+| C18、C20 | `swimlane` `chevron_flow` | 泳道路标图、箭头流程 |
+| 控件 | `delta_badge` `status_dot` `progress_bar` `harvey_ball` `callout` `sample_tag` `sparkline` `chip` | 涨跌徽标、状态点、细进度条、哈维球、引线标注、示意数据角标、迷你趋势线、全圆角胶囊 |
+
+**两个排版引擎**（只写内容，不写坐标；出图同时返回体检结果，有 error 就改文案或规格再出）：
+
+```python
+from arch_diagram import *                      # 分层架构图
+use_theme(LIGHT)
+h, report = arch_diagram(sh, x, y, w, dict(
+    layers=[Layer("业务\n平台层", title="…", rows=[Row(M("模块", icon=ic_chat), ...)]),
+            Layer("协议层", focus=True, rows=[...]),
+            Layer("引擎\n实现层", boxes=[Box("实现 A", Group(None, "能力1", "能力2")), ...])],
+    actors=Edge("使用者", ...), external=Edge("外部依赖", ...), side=Side("安全\n管控", ...),
+    fanout=dict(a=1, b=2, label="按项目切换"), boundary="系统边界"))
+
+from process_flow import *                      # 工序流程图
+h, report = process_flow(sh, x, y, w, dict(
+    lanes=dict(left=("专家", ic_person), right=("系统", ic_gear)), input=("资料", "投入"),
+    steps=[Step("读料", hot=True, left=Check("定目标"), right=Cap("长文档解析", "分页 / 检索")), Product("阶段产物"), ...],
+    output=("发布", "交付"), loop=dict(src=6, dst=4, out="不过", note="定位问题\n回到 ④")))
+```
 
 - 文本小工具：`txt` 单个 run，`kw_line` 生成「**关键词：**说明」，`num_parts("约 {1200} 次")` 生成花括号内放大标红的数字。
-- 风格：默认是复刻风（圆角、粉色强调）。按 ppt-deck 规范新做页面时先 `use_theme(STYLE)`（直角、#C7000A）。
+- 风格：默认是复刻风 `REPLICA`（按原图取色，已交付页面重建不变）。新做页面先切风格：`use_theme(LIGHT)` 浅色复刻风（圆角、浅红强调），`use_theme(STYLE)` ppt-deck 规范风（直角）。两者都是浅色系：图形不用黑色和深灰，实心灰块配深字。切换后页面里要用 `T` 时再 `from components import T` 一次。
 - 用法样例：`tools/page_template.py`（常用组件各调一次，数据都是示意值）。
 - **改了组件或 icon_lib 之后**，拿现有页面重建，比对 slide XML（C14N 规范化）和渲染图，确认旧页面没被牵连。
 
