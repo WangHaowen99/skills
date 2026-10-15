@@ -25,7 +25,7 @@ spec：
 """
 import math
 from components import *
-from components import _r, _c
+from components import _r, _c, _bd, _ln
 from arch_diagram import _fit, _tw, _dash, _arrow, F_FILL, F_BORDER, CELL_B
 
 STEP_H, PROD_H, TRAP_H, GAP = 40, 54, 46, 24
@@ -52,7 +52,7 @@ def Product(title, sub=None, *, left=None, right=None):
 
 def _trap(sh, cx, y, w_top, w_bot, h, lines, size=10.5):
     pl(sh, [(cx - w_top / 2.0, y), (cx + w_top / 2.0, y), (cx + w_bot / 2.0, y + h), (cx - w_bot / 2.0, y + h)],
-       G_MID, 1.0, close=True, fill=WHITE, rc=False)
+       _bd(None, G_MID), 1.0, close=True, fill=WHITE, rc=False)
     lines_box(sh, cx - w_top / 2.0, y, w_top, h, [[(t, size, True, T.ink)] for t in lines], C, pitch=19)
 
 def _check_mark(sh, x, cy):
@@ -122,7 +122,7 @@ def process_flow(sh, x, y, w, spec, *, left_w=None, right_w=None, spine_w=None, 
     # 投入梯形
     if spec.get('input'):
         _trap(sh, cx, in_y, sw * 0.62, sw * 0.42, TRAP_H, list(spec['input']))
-        _arrow(sh, cx, in_y + TRAP_H + 1, rows[0][0] - 1, G_MID, 1.25)
+        _arrow(sh, cx, in_y + TRAP_H + 1, rows[0][0] - 1, _ln(None, G_MID), 1.25)
 
     # 工序与产物
     n_step = 0
@@ -142,7 +142,7 @@ def process_flow(sh, x, y, w, spec, *, left_w=None, right_w=None, spine_w=None, 
             n_step += 1
             if n_step > MAX_STEPS:
                 qa.append(("warn", "工序 %d 道，建议不超过 %d" % (n_step, MAX_STEPS)))
-            fill, bc = (F_FILL, F_BORDER) if st['hot'] else (WHITE, G_MID)
+            fill, bc = (F_FILL, F_BORDER) if st['hot'] else (WHITE, _bd(None, G_MID))
             rect(sh, sx0, ry, sw, rh, fill, bc, 1.0)
             t = CIRCLED[n_step - 1] + " " + st['title'] if n_step <= len(CIRCLED) else st['title']
             got, size = _fit(t, 10.5, sw - 16, False, qa, "工序")
@@ -150,7 +150,7 @@ def process_flow(sh, x, y, w, spec, *, left_w=None, right_w=None, spine_w=None, 
             st['_n'] = n_step
         if i < len(steps) - 1:
             _arrow(sh, cx, ry + rh + (5 if st['kind'] == "product" else 1), rows[i + 1][0] - (5 if steps[i + 1]['kind'] == "product" else 1),
-                   G_MID, 1.25)
+                   _ln(None, G_MID), 1.25)
 
         # 左泳道：确认点
         if st.get('left'):
@@ -167,9 +167,9 @@ def process_flow(sh, x, y, w, spec, *, left_w=None, right_w=None, spine_w=None, 
             text_end = tx + max(_tw(r[0][0], r[0][1]) for r in rows_) + 4
             end_x = sx0 - (chan - 14) if has_loop else sx0
             if end_x - text_end > 12:
-                c = line(sh, text_end + 4, cyy, end_x, cyy, G_LINE, 0.75)
+                c = line(sh, text_end + 4, cyy, end_x, cyy, _ln(None, G_LINE), 0.75)
                 _dash(c, "sysDot")
-            oval(sh, end_x - 3, cyy - 3, 6, 6, G_MID, None)
+            oval(sh, end_x - 3, cyy - 3, 6, 6, _ln(None, G_MID), None)
         # 右泳道：系统能力
         if st.get('right'):
             cp = st['right']
@@ -181,14 +181,14 @@ def process_flow(sh, x, y, w, spec, *, left_w=None, right_w=None, spine_w=None, 
                 rows_.append([(b[0], 9, False, G_TEXT)])
             lines_box(sh, rx0 + 8, cyy - 22, avail, 44, rows_, L, pitch=20)
             start_x = sx1 + (4 if st['kind'] == "product" else 0)
-            c = line(sh, start_x, cyy, rx0 - 2, cyy, G_LINE, 0.75)
+            c = line(sh, start_x, cyy, rx0 - 2, cyy, _ln(None, G_LINE), 0.75)
             _dash(c, "sysDot")
-            oval(sh, rx0 - 5, cyy - 3, 6, 6, G_MID, None)
+            oval(sh, rx0 - 5, cyy - 3, 6, 6, _ln(None, G_MID), None)
 
     # 产出梯形 + 通过
     last_y, last_h = rows[-1]
     if spec.get('output'):
-        _arrow(sh, cx, last_y + last_h + 1, out_y - 1, G_MID, 1.25)
+        _arrow(sh, cx, last_y + last_h + 1, out_y - 1, _ln(None, G_MID), 1.25)
         _trap(sh, cx, out_y, sw * 0.42, sw * 0.62, TRAP_H, list(spec['output']))
         pt = spec.get('pass_label', "通过")
         if pt:

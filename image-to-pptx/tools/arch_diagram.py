@@ -18,7 +18,7 @@
 """
 import math
 from components import *
-from components import _r, _c
+from components import _r, _c, _bd, _ln
 
 # ---------------- 栅格（1672 像素画布；1 cm ≈ 49 px） ----------------
 RAIL_W, PAD, GAP_X, GAP_Y = 80, 10, 8, 8          # 层名栏 1.6 cm；层内边距；模块横 / 纵间距
@@ -153,6 +153,8 @@ STATE_STYLE = {      # 填充, 边框色, 线宽, 虚线, 文字色, 文字加�
 def _style(state):
     fill, bc, lw, dash, tc, bold = STATE_STYLE[state]
     bc = T.red if bc is None else bc
+    if state in (None, "new"):
+        bc = _bd(None, bc)                         # 普通框的边框由风格接管（LIGHT / STYLE 为黑色）
     tc = {None: T.ink, "red": T.red, "gray": G_TEXT}[tc]
     return fill, bc, lw, dash, tc, bold
 
@@ -206,7 +208,8 @@ def _box(sh, ctx, b, x, y, w, h, where):
         s = rrect(sh, x, y, w, h, SIDE_FILL, G_MID, 0.75, radius=_r(6)); _dash(s)
         tc = G_TEXT
     else:
-        rrect(sh, x, y, w, h, F_FILL if hot else WHITE, HOT_BOX_B if hot else CELL_B, 1.0 if hot else 0.75, radius=_r(6))
+        rrect(sh, x, y, w, h, F_FILL if hot else WHITE, HOT_BOX_B if hot else _bd(None, CELL_B), 1.0 if hot else 0.75,
+              radius=_r(6))
         tc = T.red if hot else T.ink
     ctx['states'].add(st if not ph else "plan")
     tx = x + (30 if b['n'] else 12)
@@ -235,7 +238,7 @@ def _box(sh, ctx, b, x, y, w, h, where):
         gw = gw_total * c / float(sum(cols))
         if labeled:
             gy = y + BOX_TITLE_H
-            rrect(sh, gx, gy, gw, h - BOX_TITLE_H - 8, WHITE, HOT_GROUP_B if hot else CELL_B, 0.75, radius=_r(5))
+            rrect(sh, gx, gy, gw, h - BOX_TITLE_H - 8, WHITE, HOT_GROUP_B if hot else _bd(None, CELL_B), 0.75, radius=_r(5))
             gcol = T.red if g['state'] == "gap" else T.ink
             label(sh, gx + 8, gy + 2, gw - 16, GROUP_LABEL_H - 2, g['label'] or "", 9.5, True, gcol, align=L)
             cx0, cy0, cw_ = gx + 6, gy + GROUP_LABEL_H, gw - 12
@@ -418,7 +421,7 @@ def arch_diagram(sh, x, y, w, spec, *, bg=None, draw=True):
     # 跨层贯通栏
     if side:
         top, bot = ly[0], layers_bottom
-        rrect(sh, side_x0, top, SIDE_W, bot - top, SIDE_FILL, CELL_B, 0.75, radius=_r(6))
+        rrect(sh, side_x0, top, SIDE_W, bot - top, SIDE_FILL, _bd(None, CELL_B), 0.75, radius=_r(6))
         lines_box(sh, side_x0, top + 8, SIDE_W, 46, [[(t, 10.5, True, T.ink)] for t in side['name'].split("\n")], C,
                   pitch=20)
         n = len(side['items'])
@@ -443,7 +446,7 @@ def arch_diagram(sh, x, y, w, spec, *, bg=None, draw=True):
         y1, y2 = ly[a] + lh[a], ly[a + 1]
         hot = lk.get('hot', False)
         kind = lk.get('kind', "down" if hot else "bi")          # 关键路径默认单向，读得出走向
-        _arrow(sh, ax, y1 + 1, y2 - 1, T.red if hot else G_MID, 1.75 if hot else 1.25,
+        _arrow(sh, ax, y1 + 1, y2 - 1, T.red if hot else _ln(None, G_MID), 1.75 if hot else 1.25,
                head=kind in ("bi", "down"), tail=kind in ("bi", "up"))
         if hot:
             ctx['states'].add("path")
@@ -454,11 +457,12 @@ def arch_diagram(sh, x, y, w, spec, *, bg=None, draw=True):
         downs = [ctx['centers'][bx['title']] for bx in layers[b]['boxes']]
         ups = [ctx['centers'].get(u, mid_x) for u in fan.get('ups', [])] or [mid_x]
         xs = downs + ups
-        line(sh, min(xs), busy, max(xs), busy, G_MID, 1.0)
+        lc = _ln(None, G_MID)
+        line(sh, min(xs), busy, max(xs), busy, lc, 1.0)
         for dx in downs:
-            _arrow(sh, dx, busy, y2 - 1, G_MID, 1.0)
+            _arrow(sh, dx, busy, y2 - 1, lc, 1.0)
         for ux in ups:
-            _arrow(sh, ux, busy, y1 + 1, G_MID, 1.0)
+            _arrow(sh, ux, busy, y1 + 1, lc, 1.0)
         if fan.get('label'):
             t = fan['label']
             lw_ = pill_w(t, 9)
@@ -475,9 +479,9 @@ def arch_diagram(sh, x, y, w, spec, *, bg=None, draw=True):
             if fan.get('n'):
                 ctx['marks'].append((lx - lw_ / 2.0 - 10, busy, fan['n']))
     if actors:
-        _arrow(sh, mid_x, actor_y + EDGE_H + 1, ly[0] - 1, G_MID, 1.25)
+        _arrow(sh, mid_x, actor_y + EDGE_H + 1, ly[0] - 1, _ln(None, G_MID), 1.25)
     for ex in ext_xs:
-        _arrow(sh, ex, ext_y - 1, (b_bottom if boundary else layers_bottom) + 1, G_MID, 1.0, tail=True)
+        _arrow(sh, ex, ext_y - 1, (b_bottom if boundary else layers_bottom) + 1, _ln(None, G_MID), 1.0, tail=True)
 
     # 编号：最上层
     nums = []

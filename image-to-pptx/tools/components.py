@@ -31,8 +31,9 @@
 组件只负责「画什么、按什么顺序画」，不替调用方猜位置——复刻时照源图量，新做时照 STYLE.md 的栅格算。
 
 风格：默认是复刻风 REPLICA（圆角、粉色强调，按原图取色，保证已交付页面重建不变）。新做页面先切风格：
-    use_theme(LIGHT)   浅色复刻风：圆角 + 浅红强调，文字 #333 / #595959，图形不用黑色和深灰（推荐）
+    use_theme(LIGHT)   浅色复刻风：圆角 + 浅红强调，文字 #333 / #595959，色块不用黑色和深灰（推荐）
     use_theme(STYLE)   ppt-deck 规范风：直角、#C7000A，同样是浅色系
+两种新风格的框边框、箭头连线默认黑色（Theme.border / Theme.line）；REPLICA 不设，沿用原图浅色。
 组件里取默认色和圆角的地方都会跟着变；显式传入的颜色不受影响。
 """
 import re
@@ -58,6 +59,7 @@ REPLICA = Theme(
     cell_border=RGBColor(0xDC, 0xDF, 0xE3), arrow=RGBColor(0x5B, 0x65, 0x73),
     gray_text=RGBColor(0x6B, 0x6B, 0x6B), head=RGBColor(0xDE, 0xE1, 0xE4),
     radius=1.0,                       # 圆角缩放：1 为原样，0 为直角
+    border=None, line=None,           # 框的边框 / 箭头连线：None 表示用各组件按原图取的浅色
 )
 
 # ---------- 浅色系灰阶：图形不用黑色和深灰，焦点用红，其余用中浅灰 ----------
@@ -81,6 +83,7 @@ STYLE = Theme(
     lab=RGBColor(0xD9, 0xD9, 0xD9), cell_border=RGBColor(0xBF, 0xBF, 0xBF), arrow=G_MID,
     gray_text=G_TEXT, head=RGBColor(0xE6, 0xE6, 0xE6),
     radius=0.0,
+    border=RGBColor(0, 0, 0), line=RGBColor(0, 0, 0),   # 线条可以用黑色：框的边框、箭头连线
 )
 
 # 浅色复刻风：复刻风的圆角与浅红强调 + 浅色系文字和灰阶。新做页面的默认推荐
@@ -88,7 +91,8 @@ LIGHT = Theme(**dict(REPLICA.__dict__, name="light",
                      ink=RGBColor(0x33, 0x33, 0x33), txt=RGBColor(0x59, 0x59, 0x59),
                      numd=RGBColor(0x8C, 0x8C, 0x8C), icn=RGBColor(0x80, 0x80, 0x80),
                      arrow=G_MID, gray_text=G_TEXT, foot=RGBColor(0x8C, 0x8C, 0x8C),
-                     head=RGBColor(0xE6, 0xE6, 0xE6)))
+                     head=RGBColor(0xE6, 0xE6, 0xE6),
+                     border=RGBColor(0, 0, 0), line=RGBColor(0, 0, 0)))
 
 T = REPLICA
 
@@ -101,6 +105,20 @@ def use_theme(theme):
     global T
     old, T = T, theme
     return old
+
+def _bd(explicit, default):
+    """框的边框色：显式传入的优先；否则用风格的 border（LIGHT / STYLE 为黑色）；风格没设就用组件默认的浅色。"""
+    if explicit is not None:
+        return explicit
+    b = getattr(T, 'border', None)
+    return default if b is None else b
+
+def _ln(explicit, default):
+    """箭头连线色：规则同 _bd，取风格的 line。规划中的灰虚线、重点红线、网格和分隔线不走这里。"""
+    if explicit is not None:
+        return explicit
+    b = getattr(T, 'line', None)
+    return default if b is None else b
 
 def _r(px):
     """按当前风格缩放圆角半径。"""
@@ -184,7 +202,7 @@ def line_chart_card(sh, card, title, title_box, xs, values, y0, scale, *,
                     ytitle=None, ytitle_center=None, ytitle_w=200, ytitle_size=9.5,
                     smooth=False, line_w=2.25, dot_r=6, data_labels=(), label_size=10.5,
                     annotations=(), ann_color=None, ann_lw=1.0, ann_circle=False,
-                    card_border=RGBColor(0xD0, 0xD3, 0xD6)):
+                    card_border=None):
     """折线图卡：白卡 + 结论标题 + 坐标轴 + 折线 + 数据点与标签 + 编号标注。
 
     y 映射：y0 - v * scale。yticks = [(v, 文本)]；data_labels = [(x, y, 文本)]（标签中心）。
@@ -196,7 +214,7 @@ def line_chart_card(sh, card, title, title_box, xs, values, y0, scale, *,
     ax = _c(axis_color, RGBColor(0x9A, 0x9A, 0x9A))
     YV = lambda v: y0 - v * scale
     cx, cy, cw, ch = card
-    rect(sh, cx, cy, cw, ch, WHITE, card_border, 0.75)
+    rect(sh, cx, cy, cw, ch, WHITE, _bd(card_border, RGBColor(0xD0, 0xD3, 0xD6)), 0.75)
     tx, ty, tw, th = title_box
     if isinstance(title, str):
         label(sh, tx, ty, tw, th, title, title_size, True, T.ink, align=L)
@@ -245,10 +263,10 @@ def line_chart_card(sh, card, title, title_box, xs, values, y0, scale, *,
 
 # ====================================================================== C5 指标卡
 def metric_card(sh, x, y, w, h, parts, caption, *, num_cy, cap_cy, pad=18, inner_w=None,
-                num_h=52, cap_size=9.5, border=RGBColor(0xDC, 0xDD, 0xDE), radius=3):
+                num_h=52, cap_size=9.5, border=None, radius=3):
     """白底指标卡：一行大数字（parts，常用 ba_parts 生成）+ 一行说明。"""
     iw = inner_w or (w - 2 * pad)
-    rrect(sh, x, y, w, h, WHITE, border, 0.75, radius=_r(radius))
+    rrect(sh, x, y, w, h, WHITE, _bd(border, RGBColor(0xDC, 0xDD, 0xDE)), 0.75, radius=_r(radius))
     rich(sh, x + pad, num_cy - num_h / 2.0, iw, num_h, parts)
     label(sh, x + pad, cap_cy - 12, iw, 24, caption, cap_size, False, T.txt, align=L)
 
@@ -259,14 +277,14 @@ def stat_line(sh, x, y, w, h, template, size, num_size, align=None):
     return rich(sh, x, y, w, h, num_parts(template, size, num_size), _c(align, L))
 
 def step_chain(sh, x0, y, steps, *, w=306, gap=31, h=210, title_size=13, num_r=14,
-               body_pitch=22, border=RGBColor(0xE6, 0xE9, 0xEC), radius=8):
+               body_pitch=22, border=None, radius=8):
     """推导条：①→②→③ 白卡横排，卡间红色实心三角。
 
     steps = [(标题, 大数字 parts, 说明 lines)]；大数字常用 [("7", 30, True, red), (" 个问题", 14, True, red)]。
     """
     for i, (title, big, body) in enumerate(steps):
         x = x0 + i * (w + gap)
-        rrect(sh, x, y, w, h, WHITE, border, 0.75, radius=_r(radius))
+        rrect(sh, x, y, w, h, WHITE, _bd(border, RGBColor(0xE6, 0xE9, 0xEC)), 0.75, radius=_r(radius))
         numc(sh, x + 26, y + 28, num_r, i + 1, 12, fill=T.red)
         label(sh, x + 48, y + 14, w - 66, 28, title, title_size, True, T.ink, align=L)
         rich(sh, x + 18, y + 42, w - 26, 64, big)
@@ -292,7 +310,7 @@ def milestone_timeline(sh, nodes, *, cxs, boxes, axis_y, axis_color, axis_lw=1.5
                        axis_from=None, axis_to=None,
                        date_y, date_size=11.5, dot_d=20, dot_color=RGBColor(0x45, 0x48, 0x4D),
                        stem_from=None, stem_color=RGBColor(0xBB, 0xBB, 0xBB),
-                       box_y, box_h, box_border=RGBColor(0xE3, 0xE3, 0xE3),
+                       box_y, box_h, box_border=None,
                        band_y, band_h, band_fill=RGBColor(0xE8, 0xE8, 0xE8), current_fill=None,
                        title_y=None, title_size=11.5,
                        desc_y=None, desc_h=90, desc_size=10, desc_pitch=25, desc_color=None,
@@ -312,7 +330,7 @@ def milestone_timeline(sh, nodes, *, cxs, boxes, axis_y, axis_color, axis_lw=1.5
         label(sh, cx - 40, date_y, 80, 24, nd['date'], date_size, False, T.ink)
         line(sh, cx, stem_top, cx, box_y, stem_color, 0.75)
         oval(sh, cx - dot_d / 2.0, axis_y - dot_d / 2.0, dot_d, dot_d, T.red if cur else dot_color, None)
-        rect(sh, x, box_y, w, box_h, WHITE, box_border, 0.75)
+        rect(sh, x, box_y, w, box_h, WHITE, _bd(box_border, RGBColor(0xE3, 0xE3, 0xE3)), 0.75)
         band = rect(sh, x, band_y, w, band_h, _c(current_fill, T.pink) if cur else band_fill, None)
         dc = _c(desc_color, T.ink)
         if nd.get('title') is None:
@@ -345,7 +363,7 @@ def feature_row(sh, cards, *, y, h, title_y, title_size=13.5, body_dx=21, body_r
     icons = [(图标函数, cx, cy, s, kwargs)]，卡片全部画完后再画图标。
     """
     for x, w, title, body, res in cards:
-        rect(sh, x, y, w, h, _c(fill, T.panel), _c(border, T.card_border), 0.75)
+        rect(sh, x, y, w, h, _c(fill, T.panel), _bd(border, T.card_border), 0.75)
         label(sh, x, title_y, w, 30, title, title_size, True, T.ink)
         by, bh, bp = body2 if len(body) <= 2 else body3
         lines_box(sh, x + body_dx, by, w - body_rpad, bh, body, L, TOP, pitch=bp)
@@ -370,7 +388,7 @@ def arch_layer(sh, x, y, w, h, name, *, lab_w=88, name_size=12, pitch=25,
 def module_cell(sh, x, y, w, h, text, *, size=9.5, icon=None, text_cx=None, text_w=90,
                 fill=WHITE, border=None, radius=4):
     """模块格：图标在左、文字在右。icon = (图标函数, cx, s, 颜色)。"""
-    rrect(sh, x, y, w, h, fill, _c(border, T.cell_border), 0.75, radius=_r(radius))
+    rrect(sh, x, y, w, h, fill, _bd(border, T.cell_border), 0.75, radius=_r(radius))
     cy = y + h / 2.0
     if icon:
         fn, icx, s, col = icon
@@ -380,7 +398,7 @@ def module_cell(sh, x, y, w, h, text, *, size=9.5, icon=None, text_cx=None, text
 
 def bi_arrow(sh, x, y1, y2, color=None, lw=1.25):
     """层间双向箭头。"""
-    return line(sh, x, y1, x, y2, _c(color, T.arrow), lw, arrow=True, back=True)
+    return line(sh, x, y1, x, y2, _ln(color, T.arrow), lw, arrow=True, back=True)
 
 def fanout(sh, y, downs, *, ups=(), hline=None, label_text=None, label_box=None, label_size=9,
            label_bg=WHITE, color=None, lw=1.0):
@@ -388,7 +406,7 @@ def fanout(sh, y, downs, *, ups=(), hline=None, label_text=None, label_box=None,
 
     downs / ups = [(x, 终点 y)]。label_bg=None 时说明是普通文字，否则带底色挡住横线。
     """
-    col = _c(color, T.arrow)
+    col = _ln(color, T.arrow)
     if hline:
         line(sh, hline[0], y, hline[1], y, col, lw)
     for x, ye in downs:
@@ -600,7 +618,7 @@ def callout(sh, anchor, elbow, end_x, text, size=9.5, color=None, dot=None, lw=0
     """引线标注：锚点小圆 → 折线 → 文字。end_x 在折点右侧时文字左对齐，否则右对齐。"""
     ax, ay = anchor
     ex, ey = elbow
-    pl(sh, [anchor, elbow, (end_x, ey)], G_MID, lw)
+    pl(sh, [anchor, elbow, (end_x, ey)], _ln(None, G_MID), lw)
     oval(sh, ax - 3.5, ay - 3.5, 7, 7, _c(dot, T.red), None)
     if end_x >= ex:
         label(sh, end_x + 5, ey - 11, 260, 22, text, size, False, _c(color, T.ink), align=L)
@@ -641,7 +659,7 @@ def hero_card(sh, x, y, w, h, metric, big, sub, *, badge=None, series=None, seri
 
     badge = (值, 方向, 是否强调)；series 给出时在底部画 sparkline，callouts = [(点序号, 文字, dx, dy)]。
     """
-    rrect(sh, x, y, w, h, WHITE, T.card_border, 0.75, radius=_r(4))
+    rrect(sh, x, y, w, h, WHITE, _bd(None, T.card_border), 0.75, radius=_r(4))
     label(sh, x + 20, y + 14, w - 140, 26, metric, 12, True, T.ink, align=L)
     if badge:
         v, d, e = badge
@@ -776,7 +794,7 @@ def quadrant(sh, x, y, w, h, *, xlabel, ylabel, names, points, hot_quad=1):
     quads = {1: (mx, y), 2: (x, y), 3: (x, my), 4: (mx, my)}
     qx, qy = quads[hot_quad]
     rect(sh, qx, qy, w / 2.0, h / 2.0, T.pink_bg, None)
-    rect(sh, x, y, w, h, None, G_LINE, 0.75)
+    rect(sh, x, y, w, h, None, _bd(None, G_LINE), 0.75)
     for (x1, y1, x2, y2) in ((mx, y, mx, y + h), (x, my, x + w, my)):
         c = line(sh, x1, y1, x2, y2, G_LINE, 0.75)
         d_ = etree.SubElement(c.line._get_or_add_ln(), qn('a:prstDash')); d_.set('val', 'dash')
@@ -785,9 +803,9 @@ def quadrant(sh, x, y, w, h, *, xlabel, ylabel, names, points, hot_quad=1):
         px, py, al = pos[q]
         bx = px if al == L else px - 20
         label(sh, bx, py, w / 2.0 - 20, 22, nm, 10, True, T.red if q == hot_quad else T.gray_text, align=al)
-    line(sh, x, y + h + 14, x + w, y + h + 14, G_MID, 1.0, arrow=True)
+    line(sh, x, y + h + 14, x + w, y + h + 14, _ln(None, G_MID), 1.0, arrow=True)
     label(sh, x + w - 200, y + h + 18, 200, 20, xlabel, 9.5, False, T.gray_text, align=R)
-    line(sh, x - 14, y + h, x - 14, y, G_MID, 1.0, arrow=True)
+    line(sh, x - 14, y + h, x - 14, y, _ln(None, G_MID), 1.0, arrow=True)
     label(sh, x - 8, y - 22, 200, 20, ylabel, 9.5, False, T.gray_text, align=L)
     for nm, vx, vy, hot in points:
         cx, cy = x + vx * w, y + (1 - vy) * h
@@ -911,13 +929,13 @@ def fishbone(sh, x, y, w, h, head, bones, *, head_w=130, label_h=30, cat_size=10
     sub_len = step - 24
     rect(sh, hx, my - 36, head_w, 72, T.red, None)
     lines_box(sh, hx, my - 36, head_w, 72, [[(t, 11, True, WHITE)] for t in head.split("\n")], C, pitch=22)
-    line(sh, x, my, hx, my, G_MID, 2.5, arrow=True)
+    line(sh, x, my, hx, my, _ln(None, G_MID), 2.5, arrow=True)
     for i, (cat, subs, hot) in enumerate(bones):
         col, top = i // 2, i % 2 == 0
         ax = x + step * (col + 1.15)
         ey = y + label_h if top else y + h - label_h
         ex = ax - dx
-        line(sh, ax, my, ex, ey, T.red if hot else G_MID, 1.75)
+        line(sh, ax, my, ex, ey, T.red if hot else _ln(None, G_MID), 1.75)
         bw = wpx(cat, cat_size) * 1.15 + 24
         by = y if top else y + h - label_h + 2
         shape_text(rect(sh, ex - bw / 2.0, by, bw, label_h - 2, T.red if hot else T.lab, None),
@@ -925,7 +943,7 @@ def fishbone(sh, x, y, w, h, head, bones, *, head_w=130, label_h=30, cat_size=10
         for k, (t, shot) in enumerate(subs):
             f = (k + 1) / (len(subs) + 1.0)
             px, py = ex + (ax - ex) * f, ey + (my - ey) * f
-            line(sh, px - sub_len, py, px, py, T.red if shot else G_LINE, 1.0 if shot else 0.75)
+            line(sh, px - sub_len, py, px, py, T.red if shot else _ln(None, G_LINE), 1.0 if shot else 0.75)
             label(sh, px - sub_len, py - 19, sub_len - 6, 18, t, sub_size, shot, T.red if shot else T.txt, align=R)
             if shot:
                 oval(sh, px - 3.5, py - 3.5, 7, 7, T.red, None)
@@ -934,7 +952,7 @@ def fishbone(sh, x, y, w, h, head, bones, *, head_w=130, label_h=30, cat_size=10
 # ============================================================ C17 指标拆解树
 def _tree_node(sh, nx, ny, nw, nh, nd):
     hot = nd.get('hot')
-    rect(sh, nx, ny, nw, nh, WHITE, T.red if hot else G_LINE, 1.5 if hot else 0.75)
+    rect(sh, nx, ny, nw, nh, WHITE, T.red if hot else _bd(None, G_LINE), 1.5 if hot else 0.75)
     label(sh, nx + 10, ny + 5, nw - 20, 18, nd['name'], 9, False, T.gray_text, align=L)
     label(sh, nx + 10, ny + 22, nw - 20, 30, nd['value'], 15, True, T.red if hot else T.ink, align=L)
     if nd.get('delta'):
@@ -980,12 +998,12 @@ def driver_tree(sh, x, y, h, root, *, col_x, node_w, node_h=58):
                 ops.append((mx, nd['_cy'], nd['op']))
     collect(root)
     for pts, hot in sorted(edges, key=lambda e: e[1]):
-        pl(sh, pts, T.red if hot else G_LINE, 1.5 if hot else 1.0, rc=False)
+        pl(sh, pts, T.red if hot else _ln(None, G_LINE), 1.5 if hot else 1.0, rc=False)
     for nd in nodes:
         d = nd['_d']
         _tree_node(sh, col_x[d], nd['_cy'] - node_h / 2.0, node_w[d], node_h, nd)
     for mx, my, op in ops:
-        oval(sh, mx - 11, my - 11, 22, 22, WHITE, G_MID, 1.0)
+        oval(sh, mx - 11, my - 11, 22, 22, WHITE, _bd(None, G_MID), 1.0)
         label(sh, mx - 12, my - 12, 24, 24, op, 11, True, G_TEXT)
 
 
@@ -1078,7 +1096,7 @@ def risk_level(score):
 
 def risk_marker(sh, cx, cy, rid, r=13):
     """风险编号圈：白底黑边，矩阵和右侧清单共用，保证一一对应。"""
-    oval(sh, cx - r, cy - r, 2 * r, 2 * r, WHITE, G_MID, 1.0)
+    oval(sh, cx - r, cy - r, 2 * r, 2 * r, WHITE, _bd(None, G_MID), 1.0)
     label(sh, cx - r - 4, cy - r, 2 * r + 8, 2 * r, rid, 8, True, T.ink)
 
 def risk_matrix(sh, x, y, cell, risks, *, n=5, xlabel="发生可能性", ylabel="影响程度"):
@@ -1133,7 +1151,7 @@ def strategy_house(sh, x, y, w, roof, beam, pillars, bases, *, roof_h=62, beam_h
         px = x + i * (pw + gap)
         shape_text(rect(sh, px, py, pw, 30, T.pink_bg if hot else T.lab, T.red if hot else None, 1.25),
                    name, 10.5, True, T.red if hot else T.ink)
-        rect(sh, px, py + 30, pw, pillar_h - 30, WHITE, G_LINE, 0.75)
+        rect(sh, px, py + 30, pw, pillar_h - 30, WHITE, _bd(None, G_LINE), 0.75)
         lines_box(sh, px + 12, py + 40, pw - 18, pillar_h - 48,
                   [[("■ ", 7, False, T.red), (t, 9.5, False, T.txt)] for t in pts], L, TOP, pitch=22)
     yb = py + pillar_h + gap
@@ -1198,7 +1216,7 @@ def hub_spoke(sh, cx, cy, r, center, nodes, *, rx, ry, box_w=150, box_h=50, star
         a = math.radians(start_angle + 360.0 * k / n)
         bx, by = cx + rx * math.cos(a), cy + ry * math.sin(a)
         pos.append((bx, by))
-        rrect(sh, bx - box_w / 2.0, by - box_h / 2.0, box_w, box_h, WHITE, T.red if hot else G_LINE,
+        rrect(sh, bx - box_w / 2.0, by - box_h / 2.0, box_w, box_h, WHITE, T.red if hot else _bd(None, G_LINE),
               1.5 if hot else 0.75, radius=_r(4))
         lines_box(sh, bx - box_w / 2.0, by - box_h / 2.0, box_w, box_h,
                   [[(name, 10, True, T.red if hot else T.ink)], [(role, 8.5, False, T.gray_text)]], C, pitch=18)
@@ -1211,7 +1229,7 @@ def hub_spoke(sh, cx, cy, r, center, nodes, *, rx, ry, box_w=150, box_h=50, star
         tb = min((box_w / 2.0) / abs(ux) if abs(ux) > 1e-6 else 1e9, (box_h / 2.0) / abs(uy) if abs(uy) > 1e-6 else 1e9)
         sx, sy = cx + ux * (r + 3), cy + uy * (r + 3)
         ex, ey = bx - ux * (tb + 3), by - uy * (tb + 3)
-        line(sh, sx, sy, ex, ey, T.red if hot else G_MID, 1.5 if hot else 1.0, arrow=True, back=both)
+        line(sh, sx, sy, ex, ey, T.red if hot else _ln(None, G_MID), 1.5 if hot else 1.0, arrow=True, back=both)
         if flow:
             mx, my = (sx + ex) / 2.0, (sy + ey) / 2.0
             fc = T.red if hot else T.gray_text

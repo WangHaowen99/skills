@@ -74,7 +74,7 @@ h, report = process_flow(sh, x, y, w, dict(
 ```
 
 - 文本小工具：`txt` 单个 run，`kw_line` 生成「**关键词：**说明」，`num_parts("约 {1200} 次")` 生成花括号内放大标红的数字。
-- 风格：默认是复刻风 `REPLICA`（按原图取色，已交付页面重建不变）。新做页面先切风格：`use_theme(LIGHT)` 浅色复刻风（圆角、浅红强调），`use_theme(STYLE)` ppt-deck 规范风（直角）。两者都是浅色系：图形不用黑色和深灰，实心灰块配深字。切换后页面里要用 `T` 时再 `from components import T` 一次。
+- 风格：默认是复刻风 `REPLICA`（按原图取色，已交付页面重建不变）。新做页面先切风格：`use_theme(LIGHT)` 浅色复刻风（圆角、浅红强调），`use_theme(STYLE)` ppt-deck 规范风（直角）。两者都是浅色系：色块和底色不用黑色和深灰，实心灰块配深字；框的边框、箭头连线默认黑色（风格的 `border` / `line` 属性，REPLICA 不设，沿用原图浅色）。切换后页面里要用 `T` 时再 `from components import T` 一次。
 - 用法样例：`tools/page_template.py`（常用组件各调一次，数据都是示意值）。
 - **改了组件或 icon_lib 之后**，拿现有页面重建，比对 slide XML（C14N 规范化）和渲染图，确认旧页面没被牵连。
 
