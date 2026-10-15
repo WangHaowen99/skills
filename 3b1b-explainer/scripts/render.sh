@@ -26,3 +26,5 @@ printf '%s\n' "${sel[@]}" | xargs -P "${JOBS:-7}" -I{} bash -c '
   fi
   if [ $e = 0 ]; then echo "$C ok"; else echo "$C FAILED"; grep -E "Error" logs/*_$C.log | tail -2; fi'
 $PY "$SK/check_timing.py"
+# 自动排版检查汇总（common.py 在每段结束时写 logs/layout_<场景>.txt）
+for p in "${sel[@]}"; do c=${p##*:}; f=logs/layout_$c.txt; [ -s "$f" ] && echo "排版 $c: $(wc -l < "$f") 条，见 $f"; done; true

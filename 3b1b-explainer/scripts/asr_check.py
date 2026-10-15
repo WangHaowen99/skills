@@ -8,16 +8,20 @@
   CPU（慢，约 30 分钟/100 段）：
     uv run --quiet --python 3.11 --with faster-whisper --with soundfile --with scipy python <skill>/scripts/asr_check.py
 同音字（会话/绘画、待/带、期/七）属识别误差；漏字、多字、英文词错位才需要返工。
+默认 HF_HUB_OFFLINE=1：模型已在本地缓存时，跳过 HuggingFace 联网检查（连不上时会卡约 280 秒才超时）。
+首次下载模型时设 HF_HUB_OFFLINE=0。
 """
 import difflib
 import os
 import re
 import sys
 
-import numpy as np
-import soundfile as sf
-from faster_whisper import WhisperModel
-from scipy.signal import resample_poly
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+import numpy as np  # noqa: E402
+import soundfile as sf  # noqa: E402
+from faster_whisper import WhisperModel  # noqa: E402
+from scipy.signal import resample_poly  # noqa: E402
 
 sys.path.insert(0, os.getcwd())
 from narration import SEGMENTS  # noqa: E402

@@ -17,8 +17,9 @@ sys.path.insert(0, HERE)
 from narration import SEGMENTS  # noqa: E402
 
 # ---------- 配色：颜色只表达含义，全片保持一致 ----------
-# THEME=light 切白底：强调色换成同色系的深色版，否则黄、浅蓝、青在白底上看不清
-if os.environ.get("THEME", "dark") == "light":
+# THEME=light（或 white）切白底：强调色换成同色系的深色版，否则黄、浅蓝、青在白底上看不清
+THEME = os.environ.get("THEME", "dark")
+if THEME in ("light", "white"):
     BG = "#FFFFFF"
     INK = "#1F2328"      # 正文
     MUTED = "#6B7280"    # 次要说明
@@ -136,6 +137,7 @@ class Voice:
         if rest > 0.02:
             s.wait(rest)
         s.pace = GAP_PACE
+        s.layout_issues += layout_check(s, self.seg_id, self.sub)
         s.remove(self.sub)
         s.subs.remove(self.sub)
         s.timing.append([self.seg_id, round(self.t0, 3), round(s.renderer.time, 3)])
@@ -144,7 +146,7 @@ class Voice:
 
 class Base(Scene):
     def setup(self):
-        self.subs, self.timing, self.pace = [], [], GAP_PACE
+        self.subs, self.timing, self.pace, self.layout_issues = [], [], GAP_PACE, []
 
     def play(self, *args, **kwargs):
         if self.pace != 1.0:
@@ -168,6 +170,81 @@ class Base(Scene):
         os.makedirs(os.path.join(HERE, "logs"), exist_ok=True)
         with open(os.path.join(HERE, "logs", f"timing_{type(self).__name__}.json"), "w") as f:
             json.dump(self.timing, f)
+        with open(os.path.join(HERE, "logs", f"layout_{type(self).__name__}.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(self.layout_issues) + ("\n" if self.layout_issues else ""))
+
+
+# ---------- 自动排版检查：每段旁白结束的画面（与联系表同一时刻）写 logs/layout_<场景>.txt ----------
+FRAME_X, FRAME_Y = config.frame_width / 2, config.frame_height / 2
+
+
+def _visible(m):
+    if len(m.points) == 0:
+        return False
+    try:
+        return m.get_fill_opacity() > 0.05 or (m.get_stroke_opacity() > 0.05 and m.get_stroke_width() > 0)
+    except Exception:
+        return True
+
+
+def _box(m):
+    return m.get_left()[0], m.get_right()[0], m.get_bottom()[1], m.get_top()[1]
+
+
+def _overlap(a, b):
+    w = min(a[1], b[1]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[2], b[2])
+    return w * h if w > 0 and h > 0 else 0.0
+
+
+def layout_check(scene, seg_id, sub):
+    """出界、压字幕、文字重叠（>20%）、字太小（正文 <18、代码 <16）。整屏底色（宽于 12）不算。"""
+    issues = []
+    sub_family = set(sub.get_family())
+    texts, leaves = [], []
+    for top in [m for m in scene.mobjects if m not in scene.subs]:
+        for m in top.get_family():
+            if m in sub_family:
+                continue
+            if isinstance(m, Text):
+                if any(_visible(c) for c in m.get_family()):
+                    texts.append(m)
+            elif not m.submobjects and _visible(m) and m.width < 12:
+                leaves.append(m)
+    sx0, sx1, sy0, sy1 = _box(sub[1])
+    for m in texts + leaves:
+        x0, x1, y0, y1 = _box(m)
+        name = f"“{m.text[:12]}”" if isinstance(m, Text) else type(m).__name__
+        if x0 < -FRAME_X + 0.15 or x1 > FRAME_X - 0.15 or y1 > FRAME_Y - 0.1 or y0 < -FRAME_Y + 0.05:
+            issues.append(f"{seg_id}\t出界\t{name} x[{x0:.2f},{x1:.2f}] y[{y0:.2f},{y1:.2f}]")
+        elif y0 < sy1 + 0.05 and x1 > sx0 and x0 < sx1:
+            issues.append(f"{seg_id}\t压字幕\t{name} 底边 {y0:.2f} < 字幕顶 {sy1:.2f}")
+    for i, a in enumerate(texts):
+        fs = getattr(a, "font_size", 99)
+        if fs < (15.5 if getattr(a, "font", "") == MONO else 17.5):
+            issues.append(f"{seg_id}\t字太小\t“{a.text[:12]}” {fs:.0f}")
+        ba = _box(a)
+        for b in texts[i + 1:]:
+            bb = _box(b)
+            ov = _overlap(ba, bb)
+            small = min((ba[1] - ba[0]) * (ba[3] - ba[2]), (bb[1] - bb[0]) * (bb[3] - bb[2]))
+            if small > 0 and ov / small > 0.2:
+                issues.append(f"{seg_id}\t文字重叠\t“{a.text[:10]}” × “{b.text[:10]}” {ov / small:.0%}")
+    return issues
+
+
+def soft_indicate(m, color=YELLOW, scale_factor=1.06, **kw):
+    """Indicate 的替代：不透明填充只换描边色。原版 Indicate 会把不透明底色整块染成实色、盖住文字（白底尤其明显）。"""
+    target = m.copy().scale(scale_factor)
+    text_parts = {id(x) for t in target.get_family() if isinstance(t, Text) for x in t.get_family()}
+    for x in target.get_family():
+        if not isinstance(x, VMobject) or len(x.points) == 0:
+            continue
+        if id(x) not in text_parts and x.get_fill_opacity() >= 0.5:
+            x.set_stroke(color)
+        else:
+            x.set_color(color)
+    return Transform(m, target, rate_func=there_and_back, **kw)
 
 
 # ---------- 部件 ----------
@@ -201,11 +278,20 @@ def darrow(a, b, color=INK, sw=3.5, buff=0.1, ratio=0.12, **kw):
     return VGroup(dashed, tips)
 
 
+def _ray_box(m, d):
+    """从 m 中心沿 d 射出与外接矩形的交点（圆角矩形上 get_boundary_point 会落到角上，水平线会歪）。"""
+    tx = m.width / 2 / abs(d[0]) if abs(d[0]) > 1e-6 else np.inf
+    ty = m.height / 2 / abs(d[1]) if abs(d[1]) > 1e-6 else np.inf
+    return m.get_center() + d * min(tx, ty)
+
+
 def edge_arrow(a, b, color=MUTED, sw=3, arc=0.0, buff=0.08):
-    """从 a 的边界指向 b 的边界（适合环形流程图）。"""
+    """从 a 的边界指向 b 的边界（流程图、环形图）；箭头尖固定约 0.22，不随线长放大。"""
     d = b.get_center() - a.get_center()
     d = d / np.linalg.norm(d)
-    return arrow(a.get_boundary_point(d), b.get_boundary_point(-d), color, sw=sw, buff=buff, path_arc=arc)
+    p0, p1 = _ray_box(a, d), _ray_box(b, -d)
+    ratio = min(0.12, 0.22 / max(np.linalg.norm(p1 - p0), 0.1))
+    return arrow(p0, p1, color, sw=sw, buff=buff, ratio=ratio, path_arc=arc)
 
 
 def check(color=GREEN, s=0.35, sw=7):

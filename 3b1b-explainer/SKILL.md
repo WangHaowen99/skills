@@ -26,6 +26,7 @@ description: 用 Manim 做 3Blue1Brown 风格的中文讲解视频（动画 + �
 - **受众和时长**：中文讲解约 7 字/秒（1.4 倍速女声）或 4.5 字/秒（常速）。10 分钟大约 4000 字。
 - **配音**：
   - 默认：Edge 晓晓甜美女声，+40%。
+  - Edge 免费通道的普通话音色只有：晓晓、晓伊（女），云扬（新闻播报，沉稳）、云健、云希、云夏（男）。云泽等 Azure 专有音色会返回 NoAudioReceived，要 Azure Speech 密钥。用户点名的音色先试一句，不行就出几个试听样本让用户选。
   - 敏感内容不能出网时：离线 Kokoro，或 IndexTTS（本机 GPU）。
 - **画面**：16:9 1080p30，深色或白色底，字幕烧录在底部。
 - **输出**：工程放在 `<工作目录>/<任务>/video/`，成片放在 `out/`。
@@ -69,7 +70,7 @@ bash $SK/scripts/new_project.sh <工作目录>/<任务>/video
 ## 3. 配音（任选一种，产出 `audio/<段id>.wav` + `audio/durations.json`）
 | 方式 | 命令 | 说明 |
 |---|---|---|
-| Edge 晓晓（默认） | `~/.venvs/tts/bin/python $SK/scripts/tts_edge.py [段id…]` | `EDGE_VOICE`/`EDGE_RATE` 可改。已内置 2026-10 的 403 绕行（新主机） |
+| Edge 晓晓（默认） | `TTS_WORKERS=8 ~/.venvs/tts/bin/python $SK/scripts/tts_edge.py [段id…]` | `EDGE_VOICE`/`EDGE_RATE` 可改（如 `zh-CN-YunyangNeural`）。已内置 2026-10 的 403 绕行（新主机）。90 段约 25 秒 |
 | IndexTTS | 见下 | 本机离线、带情绪；按 skill `voice06-narration` 的流程走 |
 | Kokoro | `~/.venvs/tts/bin/python $SK/scripts/tts_kokoro.py [段id…]` | 离线男声；英文和数字容易读错，靠朗读文本修 |
 
@@ -85,7 +86,8 @@ IndexTTS 流程：
 IndexTTS 合成要十几分钟。可以先按“字数 ÷ 6.3 秒”生成静音占位音频和 `durations.json`，把场景写完、预览排版；
 导入真配音前把占位 `audio/` 复制成 `audio_ref/`，动画会按新旧时长比自动调节节奏（见下）。
 
-**核对**（不能跳过，模型听不到声音）：
+**核对**（不能跳过，模型听不到声音）。放后台跑（有 GPU 用 CUDA，见 `asr_check.py` 开头），同时去写场景，不要干等。
+脚本默认 `HF_HUB_OFFLINE=1`，跳过 HuggingFace 联网检查（网络不通时会白等约 280 秒）；首次下载模型时设 `HF_HUB_OFFLINE=0`。
 ```bash
 uv run --quiet --python 3.11 --with faster-whisper --with soundfile --with scipy python $SK/scripts/asr_check.py
 ```
@@ -141,11 +143,24 @@ class S1Foo(Base):                     # 待决策项用 Decision（dkit.py）
 - 不要给 `VGroup` 设名为 `color` 的属性（如 `box.color = …`），会把整组染成同一色。自定义属性换个名字。
 - 想“暗掉”一个已有边框和底色的部件，`set_opacity` 会把填充也拉满；换成用颜色插值重建一个，再 `Transform`。
 - 清场时列出要保留的对象，要按场上的实际成员列：用 `LaggedStart` 逐个 `FadeIn` 的组，场上是一个个成员而不是组本身，`keep` 里要展开成 `*group`。
+- 不要对带不透明底色的组合用 `Indicate`：它把底色整块染成实色、盖住文字（白底尤其明显）。用 `common.soft_indicate`。
+- 同一对象的多段 `.animate.move_to` 串在 `Succession` 里（尤其套在 `LaggedStart` 中）时，后几段会从初始位置起跳、斜穿画面。改用一条折线路径 + `MoveAlongPath`。
+- `Arc.add_tip` 会改变弧的尺寸；JetBrains Mono 会把 `->` 连写成箭头字形。
+- 节点连线用 `edge_arrow`：端点按外接矩形求交（圆角矩形用 `get_boundary_point` 会落到角上，水平线发歪），箭头尖固定大小。
+
+### 并行写场景（场景 ≥ 6 个时推荐）
+写场景是全流程最大的耗时块（单次输出 1~4 万 token，串行写 11 个场景约 40~50 分钟）。做法：
+1. 主会话先写共享部件 `kit.py`：贯穿全片的主图（固定坐标）、标题条、收益标签行、代码块等；`scenes.txt` 先按“模块:场景类”定好。
+2. 按模块把场景分给 3~4 个子代理（后台运行），每个只写自己的模块文件，禁止改 common/kit/narration/scenes.txt；给出各自场景的分镜、核实过的事实、章节号；预览用 `JOBS=3`。
+3. 子代理自己跑预览、读联系表和 `logs/layout_*.txt`，修到干净再回报。主会话收到一个就终检一个，通过的立即后台 `render.sh hq <场景>`（流水线，不等全部写完）。
+4. kit 有缺陷时由主会话统一修，再通知仍在工作的子代理重渲。
+5. 多个子代理并行时，白底直接把 `common.py` 里 `THEME` 的默认值改成 `"light"`，免得有人漏设环境变量。
 
 ## 5. 预览与检查（每批改动都走一遍）
 ```bash
 bash $SK/scripts/render.sh preview [场景…]   # 480p，并行，独立 media 目录，自动出联系表 + 超时检查
 ```
+- 先看自动排版检查：`common.py` 在每段结束时检查出界、压字幕、文字重叠、字太小（正文 <18、代码 <16），写 `logs/layout_<场景>.txt`，render.sh 结尾汇总。日志为空不代表没问题，仍要看图。
 - **逐张 Read** `logs/sheet_<场景>.png`。每格是一段旁白结束时的画面，左上角标着段 id。
 - 检查：重叠、出界、被字幕挡住、字太小、标签离对象太远、遗留元素没清掉、白底下颜色太淡。
 - 修完只重渲改动的场景。
@@ -155,17 +170,29 @@ bash $SK/scripts/render.sh preview [场景…]   # 480p，并行，独立 media 
 ## 6. 成片
 ```bash
 JOBS=8 bash $SK/scripts/render.sh hq                            # 1080p30，多场景并行（JOBS 默认 7）
-VCODEC=h264_nvenc bash $SK/scripts/concat.sh out/<成片名>.mp4   # 按 scenes.txt 拼接，loudnorm -16 LUFS
+bash $SK/scripts/concat.sh out/<成片名>.mp4                     # 按 scenes.txt 拼接：视频流直接拷贝（约 15 秒），音频 loudnorm -16 LUFS
+python $SK/scripts/flash_scan.py out/<成片名>.mp4                # 查过渡中的实色闪烁；白底加 THEME=light
 ```
 - 提速靠多进程并行，不靠 Manim 的 OpenGL 渲染器：实测单场景 OpenGL 比 Cairo 还慢，还要处理 `VMobject`、`z_index` 等兼容问题。
   12 核机器上 10 个场景 1080p 并行约 2~3 分钟。
-- GPU 用在拼接编码（`VCODEC=h264_nvenc`）和配音核对（CUDA 版 faster-whisper）上。
+- 拼接默认不重编码视频（实测各场景交界音画偏移 0 ms）；播放异常时 `VCODEC=libx264` 或 `VCODEC=h264_nvenc` 回退到重编码。
+- GPU 用在配音核对（CUDA 版 faster-whisper）上。
+- 渲染目录放 Linux 本地盘（ext4）而不是 Windows 挂载盘，实测只快约 8%，不值得折腾。
 
 验收：
 - `ffprobe` 看分辨率和时长。
 - `volumedetect` 平均约 -19 dB。
 - `silencedetect=n=-45dB:d=2.5` 应该是 0 段。
-- 用成片再出一两张联系表抽查。
+- 用成片再出一两张联系表抽查。联系表只看每段结尾，过渡中的问题（如 Indicate 实色闪烁）要靠 `flash_scan.py`。
+
+### 耗时参考（8.5 分钟成片，11 场景 89 段）
+| 阶段 | 耗时 | 备注 |
+|---|---|---|
+| Edge 配音 | 约 25 秒 | `TTS_WORKERS=8` |
+| ASR 核对 | 约 1 分钟 | GPU + 离线加载模型 |
+| 写场景（4 个子代理并行） | 约 40 分钟 | 单个子代理 25~40 分钟；按段数均分可再省一点 |
+| 1080p 渲染 | 每批 3~4 个场景 1~2 分钟 | 与写场景流水线并行 |
+| 拼接 | 约 15 秒 | 视频流拷贝；整片重编码要 4~5 分钟 |
 
 ## 7. 归档与汇报
 - **归档**：按用户习惯放到对应项目目录或云盘收件箱。文件名带日期，不覆盖旧版；配音源文件和视频工程源码（不含 `media/`）可以一起打包。
